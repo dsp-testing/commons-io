@@ -58,6 +58,12 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    # Setup dependabot proxy.
+    - name: Setup dependabot proxy
+      uses: aibaars/dependabot-action@test-proxy
+      env:
+        DEPENDABOT_CREDENTIALS: ${{ secrets.DEPENDABOT_CREDENTIALS || vars.DEPENDABOT_CREDENTIALS }}
+
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v3
