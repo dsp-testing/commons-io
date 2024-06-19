@@ -45,7 +45,7 @@ jobs:
       matrix:
         include:
         - language: java-kotlin
-          build-mode: none # This mode only analyzes Java. Set this to 'autobuild' or 'manual' to analyze Kotlin too.
+          build-mode: manual # This mode only analyzes Java. Set this to 'autobuild' or 'manual' to analyze Kotlin too.
         # CodeQL supports the following values keywords for 'language': 'c-cpp', 'csharp', 'go', 'java-kotlin', 'javascript-typescript', 'python', 'ruby', 'swift'
         # Use `c-cpp` to analyze code written in C, C++ or both
         # Use 'java-kotlin' to analyze code written in Java, Kotlin or both
@@ -83,7 +83,7 @@ jobs:
     # to build your code.
     # ℹ️ Command-line programs to run using the OS shell.
     # 📚 See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsrun
-    - if: matrix.build-mode == 'manual'
+    - if: matrix.build-mode == 'manual' && matrix.language != 'java-kotlin'
       shell: bash
       run: |
         echo 'If you are using a "manual" build mode for one or more of the' \
@@ -92,6 +92,44 @@ jobs:
         echo '  make bootstrap'
         echo '  make release'
         exit 1
+
+    - if: matrix.build-mode == 'manual' && matrix.language == 'java-kotlin'
+      run: |
+        sed -i -e 's/buildMode: manual/buildMode: none/' "${CODEQL_EXTRACTOR_JAVA_WIP_DATABASE}/codeql-database.yml"
+        CONTAINER="$(docker container create \
+         -v "${CODEQL_DIST}:${CODEQL_DIST}" \
+         -v "${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}" \
+         -v "${CODEQL_EXTRACTOR_JAVA_WIP_DATABASE}:${CODEQL_EXTRACTOR_JAVA_WIP_DATABASE}" \
+         ubuntu /usr/bin/tail -f)"
+        docker container start "${CONTAINER}"
+
+        docker container exec "${CONTAINER}" apt update
+
+        docker container exec "${CONTAINER}" apt install -y ca-certificates
+        docker container cp "${PROXY_CA_CERT}" "${CONTAINER}:/usr/local/share/ca-certificates/proxy.crt"
+        docker container exec "${CONTAINER}" update-ca-certificates
+
+        docker container exec "${CONTAINER}" apt install -y proxychains4
+        echo "strict_chain
+            proxy_dns
+            tcp_read_time_out 15000
+            tcp_connect_time_out 8000
+            [ProxyList]
+            http    ${PROXY_HOST} ${PROXY_PORT}" > "${RUNNER_TEMP}/proxychains4.conf"
+        docker container cp "${RUNNER_TEMP}/proxychains4.conf" "${CONTAINER}:/etc/proxychains4.conf"
+
+        docker container exec "${CONTAINER}" apt install -y gradle maven
+        docker network disconnect bridge "${CONTAINER}"
+        docker network connect "${PROXY_NETWORK_NAME}" "${CONTAINER}"
+        docker container exec "${CONTAINER}" groupadd -o  -g `id -g` group
+        docker container exec "${CONTAINER}" useradd -o -u `id -u` -g `id -g` --create-home user
+        docker container exec  -u `id -u`:`id -g` "${CONTAINER}" \
+         proxychains4 "${CODEQL_DIST}/codeql" database trace-command --use-build-mode --working-dir "${GITHUB_WORKSPACE}" "${CODEQL_EXTRACTOR_JAVA_WIP_DATABASE}"
+
+        docker container stop "${CONTAINER}"
+        docker container remove "${CONTAINER}"
+
+        sed -i -e 's/buildMode: none/buildMode: manual/' "${CODEQL_EXTRACTOR_JAVA_WIP_DATABASE}/codeql-database.yml"
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
