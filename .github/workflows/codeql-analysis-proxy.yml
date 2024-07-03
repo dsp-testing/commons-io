@@ -86,6 +86,29 @@ jobs:
              --proxy-user "proxy_user:${{ steps.proxy.outputs.proxy_password }}" \
              -i  https://nu.nl
 
+    - name: Setup Java buildless to use proxy
+      run: |
+       TRUST_STORE="$(mktemp -p ${RUNNER_TEMP} -d)/cacerts.p12"
+       echo "${PROXY_CA_CERTIFICATE}" | keytool -importcert  -noprompt -alias proxy -keystore "${TRUST_STORE}" -storetype pkcs12 -storepass changeit 
+       JAVA_SSL_OPTS="-Djavax.net.ssl.trustStore=${TRUST_STORE} -Djavax.net.ssl.trustStoreType=PKCS12 -Djavax.net.ssl.trustStorePassword=changeit"
+       JAVA_PROXY_OPTS="-Dhttp.proxyHost=${PROXY_HOST} -Dhttp.proxyPort=${PROXY_PORT} -Dhttp.proxyUser=proxy_user -Dhttp.proxyPassword=${PROXY_PASSWORD} -Dhttp.proxyHost=${PROXY_HOST} -Dhttps.proxyPort=${PROXY_PORT} -Dhttps.proxyUser=proxy_user -Dhttps.proxyPassword=${PROXY_PASSWORD}"
+       mkdir -p "${HOME}/.m2"
+       echo "<settings xmlns=\"http://maven.apache.org/SETTINGS/1.2.0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" 
+              xsi:schemaLocation=\"http://maven.apache.org/SETTINGS/1.2.0 http://maven.apache.org/xsd/settings-1.2.0.xsd\">\
+               <proxies>
+                 <proxy><protocol>http</protocol><host>${PROXY_HOST}</host><port>${PROXY_PORT}</port><username>proxy_user</username><password>${PROXY_PASSWORD}</password></proxy>
+                 <proxy><protocol>https</protocol><host>${PROXY_HOST}</host><port>${PROXY_PORT}</port><username>proxy_user</username><password>${PROXY_PASSWORD}</password></proxy>
+               </proxies>
+             </settings>" > "${HOME}/.m2/settings.xml"
+       echo "MAVEN_OPTS=${JAVA_SSL_OPTS} ${MAVEN_OPTS}" >> "$GITHUB_ENV"
+       echo "GRADLE_OPTS=${JAVA_SSL_OPTS} ${JAVA_PROXY_OPTS} ${GRADLE_OPTS}" >> "$GITHUB_ENV"
+       echo "CODEQL_JAVA_EXTRACTOR_TRUST_STORE_PATH=${TRUST_STORE}" >> "$GITHUB_ENV"
+      env:
+        PROXY_HOST: ${{ steps.proxy.outputs.proxy_host }}
+        PROXY_PORT: ${{ steps.proxy.outputs.proxy_port }}
+        PROXY_PASSWORD: ${{ steps.proxy.outputs.proxy_password }}
+        PROXY_CA_CERTIFICATE: ${{ steps.proxy.outputs.proxy_ca_certificate }}
+
     # If the analyze step fails for one of the languages you are analyzing with
     # "We were unable to automatically build your code", modify the matrix above
     # to set the build mode to "manual" for that language. Then modify this step
