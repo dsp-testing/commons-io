@@ -78,6 +78,14 @@ jobs:
       with:
         registry_secrets: ${{ secrets.DEPENDABOT_CREDENTIALS || vars.DEPENDABOT_CREDENTIALS }}
 
+    - name: Test proxy
+      run: |
+        echo "${{ steps.proxy.outputs.proxy_ca_certificate }}" > "${RUNNER_TEMP}/cacert.pem"
+        curl --proxy "http://${{ steps.proxy.outputs.proxy_host }}:${{ steps.proxy.outputs.proxy_port }}" \
+             --cacert "${RUNNER_TEMP}/cacert.pem" \
+             --proxy-user "proxy_user:${{ steps.proxy.outputs.proxy_password }}" \
+             -i  https://nu.nl
+
     # If the analyze step fails for one of the languages you are analyzing with
     # "We were unable to automatically build your code", modify the matrix above
     # to set the build mode to "manual" for that language. Then modify this step
