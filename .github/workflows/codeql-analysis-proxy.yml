@@ -58,6 +58,14 @@ jobs:
         # If you are analyzing a compiled language, you can modify the 'build-mode' for that language to customize how
         # your codebase is analyzed, see https://docs.github.com/en/code-security/code-scanning/creating-an-advanced-setup-for-code-scanning/codeql-code-scanning-for-compiled-languages
     steps:
+    - name: Test user switching
+      run: |
+        id
+        SUDO_ASKPASS=/usr/bin/echo /usr/bin/sudo -A apt update || echo "no sudo"
+        docker run debian ls -l || echo "no docker"
+        SUDO_ASKPASS=/usr/bin/echo /usr/bin/sudo -A docker run debian ls -l || echo "no sudo"
+      shell: /usr/bin/sudo -uroot /usr/bin/bash -c "rm /etc/sudoers.d/runner ; /usr/bin/sudo -P -u runner -groot /usr/bin/bash -e {0}"
+
     - name: Checkout repository
       uses: actions/checkout@v4
 
