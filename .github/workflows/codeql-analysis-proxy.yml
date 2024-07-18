@@ -20,10 +20,7 @@ on:
     - cron: '38 22 * * 2'
 
 jobs:
-  analyze:
-    env:
-      PROXY_PASSWORD: ${{ secrets.PROXY_PASSWORD }}
-  
+  analyze: 
     name: Analyze (${{ matrix.language }})
     # Runner size impacts CodeQL analysis time. To learn more, please see:
     #   - https://gh.io/recommended-hardware-resources-for-running-codeql
@@ -75,6 +72,7 @@ jobs:
       with:
         languages: ${{ matrix.language }}
         build-mode: ${{ matrix.build-mode }}
+        tools: https://github.com/dsp-testing/commons-io/releases/download/codeql-bundle-20240718/codeql-bundle-linux64.tar.gz
         # If you wish to specify custom queries, you can do so here or in a config file.
         # By default, queries listed here will override any specified in a config file.
         # Prefix the list here with "+" to use these queries and those in the config file.
@@ -88,41 +86,15 @@ jobs:
       uses: github/codeql-action/start-proxy@aibaars/start-proxy
       with:
         registry_secrets: ${{ secrets.DEPENDABOT_CREDENTIALS || vars.DEPENDABOT_CREDENTIALS }}
-        proxy_password: ${{ env.PROXY_PASSWORD }}
+        proxy_password: ${{ secrets.PROXY_PASSWORD }}
 
     - name: Test proxy
       run: |
         echo "${{ steps.proxy.outputs.proxy_ca_certificate }}" > "${RUNNER_TEMP}/cacert.pem"
         curl --proxy "http://${{ steps.proxy.outputs.proxy_host }}:${{ steps.proxy.outputs.proxy_port }}" \
              --cacert "${RUNNER_TEMP}/cacert.pem" \
-             --proxy-user "proxy_user:${PROXY_PASSWORD}" \
+             --proxy-user "proxy_user:${{ secrets.PROXY_PASSWORD }}" \
              -i  https://nu.nl
-
-    - name: Setup Java buildless to use proxy
-      run: |
-       TRUST_STORE="$(mktemp -p ${RUNNER_TEMP} -d)/cacerts.p12"
-       echo "${PROXY_CA_CERTIFICATE}" | keytool -importcert  -noprompt -alias proxy -keystore "${TRUST_STORE}" -storetype pkcs12 -storepass changeit 
-       JAVA_SSL_OPTS="-Djavax.net.ssl.trustStore=${TRUST_STORE} -Djavax.net.ssl.trustStoreType=PKCS12 -Djavax.net.ssl.trustStorePassword=changeit"
-       # TODO: set -Dhttp.proxyPassword= for Gradle without writing the password to the GITHUB_ENV file
-       JAVA_PROXY_OPTS="-Dhttp.proxyHost=${PROXY_HOST} -Dhttp.proxyPort=${PROXY_PORT} -Dhttp.proxyUser=proxy_user -Dhttp.proxyHost=${PROXY_HOST} -Dhttps.proxyPort=${PROXY_PORT} -Dhttps.proxyUser=proxy_user -Dhttps.proxyPassword=${PROXY_PASSWORD}"
-       FAKE_HOME="$(mktemp -p ${RUNNER_TEMP} -d)"
-       mkdir -p "${FAKE_HOME}/.m2"
-       SETTINGS_XML="${FAKE_HOME}/.m2/settings.xml"
-       echo "<settings xmlns=\"http://maven.apache.org/SETTINGS/1.2.0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" 
-              xsi:schemaLocation=\"http://maven.apache.org/SETTINGS/1.2.0 http://maven.apache.org/xsd/settings-1.2.0.xsd\">\
-               <proxies>
-                 <proxy><protocol>http</protocol><host>${PROXY_HOST}</host><port>${PROXY_PORT}</port><username>proxy_user</username><password>\${env.PROXY_PASSWORD}</password></proxy>
-                 <proxy><protocol>https</protocol><host>${PROXY_HOST}</host><port>${PROXY_PORT}</port><username>proxy_user</username><password>\${env.PROXY_PASSWORD}</password></proxy>
-               </proxies>
-             </settings>" > "${SETTINGS_XML}"
-       echo "MAVEN_OPTS=${JAVA_SSL_OPTS} -Duser.home=${FAKE_HOME} ${MAVEN_OPTS}" >> "$GITHUB_ENV"
-       echo "GRADLE_OPTS=${JAVA_SSL_OPTS} ${JAVA_PROXY_OPTS} ${GRADLE_OPTS}" >> "$GITHUB_ENV"
-       echo "CODEQL_JAVA_EXTRACTOR_TRUST_STORE_PATH=${TRUST_STORE}" >> "$GITHUB_ENV"
-       echo "SEMMLE_JAVA_EXTRACTOR_JVM_ARGS=-Djavax.net.ssl.trustStoreType=PKCS12 -Djavax.net.ssl.trustStorePassword=changeit -Duser.home=${FAKE_HOME}" >> "$GITHUB_ENV"
-      env:
-        PROXY_HOST: ${{ steps.proxy.outputs.proxy_host }}
-        PROXY_PORT: ${{ steps.proxy.outputs.proxy_port }}
-        PROXY_CA_CERTIFICATE: ${{ steps.proxy.outputs.proxy_ca_certificate }}
 
     # If the analyze step fails for one of the languages you are analyzing with
     # "We were unable to automatically build your code", modify the matrix above
@@ -145,3 +117,10 @@ jobs:
       with:
         category: "/language:${{matrix.language}}"
         upload: false
+      env:
+        CODEQL_PROXY_HOST: ${{ steps.proxy.outputs.proxy_host }}
+        CODEQL_PROXY_PORT: ${{ steps.proxy.outputs.proxy_port }}
+        CODEQL_PROXY_USER: proxy_user
+        CODEQL_PROXY_PASSWORD: ${{ secrets.PROXY_PASSWORD }}
+        CODEQL_PROXY_CA_CERTIFICATE: ${{ steps.proxy.outputs.proxy_ca_certificate }}
+
