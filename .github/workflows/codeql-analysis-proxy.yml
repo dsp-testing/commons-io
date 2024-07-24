@@ -83,7 +83,7 @@ jobs:
     # Setup dependabot proxy.
     - name: Setup dependabot proxy
       id: proxy
-      uses: github/codeql-action/start-proxy@aibaars/start-proxy
+      uses: github/codeql-action/start-proxy@main
       with:
         registry_secrets: ${{ secrets.DEPENDABOT_CREDENTIALS }}
         proxy_password: ${{ secrets.PROXY_PASSWORD }}
