@@ -13,7 +13,7 @@ name: "CodeQL"
 
 on:
   push:
-    branches: [ "main", "aibaars/test-proxy" ]
+    branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
   schedule:
